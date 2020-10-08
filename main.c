@@ -284,10 +284,12 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     return DefWindowProc(hWnd, message, wParam, lParam);
 }
 
-int WINAPI WinMain( HINSTANCE hInstance,
+/*int WINAPI WinMain( HINSTANCE hInstance,
                     HINSTANCE hPrevInstance,
                     LPSTR lpCmdLine,
                     int nCmdShow)
+*/
+int Init()
 {
     MSG msg;
     WNDCLASS wc;
@@ -296,7 +298,7 @@ int WINAPI WinMain( HINSTANCE hInstance,
     wc.lpfnWndProc = (WNDPROC) WndProc;
     wc.cbClsExtra = 0;
     wc.cbWndExtra = 0;
-    wc.hInstance = hInstance;
+    wc.hInstance = 0;
     wc.hIcon = NULL;
     wc.hCursor = LoadCursor(NULL, IDC_ARROW);
     // Фоновая кисть для окна OpenGL не требуется
@@ -315,7 +317,7 @@ int WINAPI WinMain( HINSTANCE hInstance,
                         window_width, window_height,
                         NULL,
                         NULL,
-                        hInstance,
+                        NULL,
                         NULL);
     if (hWnd == NULL)
         return false;
@@ -378,3 +380,9 @@ int WINAPI WinMain( HINSTANCE hInstance,
     return msg.wParam;
 }
 
+__int32 __cdecl main()
+{
+    printf("Hello friend\n");
+    int result = Init();
+    return result;
+}
