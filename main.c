@@ -13,11 +13,17 @@
 #define window_width 1280
 #define window_height 720
 
+typedef struct
+{
+    int width;
+    int height;
+}_window;
+
+_window win;
 
 
 void Print_Gl_Info()
 {
-
     FILE* file_log;
     fopen_s(&file_log, "boot_log.txt", "w+");
 
@@ -256,9 +262,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
                     WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
                     WGL_CONTEXT_MINOR_VERSION_ARB, 3,
                     WGL_CONTEXT_PROFILE_MASK_ARB,  WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
-                    0,0, // NULL termination
+                    0,0,
                 };
-
 
                 hRC = wglCreateContextAttribsARB(hDC, 0, attribs);
 
@@ -284,45 +289,64 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
     return DefWindowProc(hWnd, message, wParam, lParam);
 }
 
-/*int WINAPI WinMain( HINSTANCE hInstance,
-                    HINSTANCE hPrevInstance,
-                    LPSTR lpCmdLine,
-                    int nCmdShow)
-*/
 int Init()
 {
     MSG msg;
-    WNDCLASS wc;
+    WNDCLASSEX wcx;
+    RECT rect;
+    DWORD style, exStyle;
+    int x, y;
     HWND hWnd;
-    wc.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
-    wc.lpfnWndProc = (WNDPROC) WndProc;
-    wc.cbClsExtra = 0;
-    wc.cbWndExtra = 0;
-    wc.hInstance = 0;
-    wc.hIcon = NULL;
-    wc.hCursor = LoadCursor(NULL, IDC_ARROW);
-    // Фоновая кисть для окна OpenGL не требуется
-    wc.hbrBackground = NULL;
-    wc.lpszMenuName = NULL;
-    wc.lpszClassName = lpszAppName;
-    if (RegisterClass(&wc) == 0)
+
+    memset(&wcx, 0, sizeof(wcx));
+    wcx.cbSize = sizeof(wcx);
+    wcx.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+    wcx.lpfnWndProc = (WNDPROC)WndProc;
+    wcx.hInstance = 0;
+    wcx.hIcon = NULL;
+    wcx.hCursor = LoadCursor(NULL, IDC_ARROW);
+    wcx.lpszClassName = lpszAppName;
+    if (RegisterClassEx(&wcx) == 0)
     {
+        printf("RegisterClassEx fail (%d)\n", GetLastError());
         return false;
     }
 
-    hWnd = CreateWindow(lpszAppName,
-                        lpszAppName,
-                        WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPCHILDREN,
-                        100, 100,
-                        window_width, window_height,
-                        NULL,
-                        NULL,
-                        NULL,
-                        NULL);
-    if (hWnd == NULL)
+    // style of window
+    style   = WS_CAPTION | WS_SYSMENU | WS_MINIMIZEBOX;
+    exStyle = WS_EX_APPWINDOW;
+
+    // alignment window by center of screen
+    x = (GetSystemMetrics(SM_CXSCREEN) - window_width)  / 2;
+    y = (GetSystemMetrics(SM_CYSCREEN) - window_height) / 2;
+
+    rect.left   = x;
+    rect.right  = x + window_width;
+    rect.top    = y;
+    rect.bottom = y + window_height;
+
+    AdjustWindowRectEx (&rect, style, FALSE, exStyle);
+
+    hWnd = CreateWindowEx(exStyle, lpszAppName, lpszAppName, style, rect.left, rect.top,
+		rect.right - rect.left, rect.bottom - rect.top, NULL, NULL, NULL, NULL);
+        
+
+    if (hWnd == NULL) {
+        printf("CreateWindowEx fail (%d)\n", GetLastError());
         return false;
+    }
     ShowWindow(hWnd, SW_SHOW);
     UpdateWindow(hWnd);
+
+    // get size of a window
+    GetClientRect(hWnd, &rect);
+    win.width  = rect.right - rect.left;
+    win.height = rect.bottom - rect.top;
+    
+    // set up viewport whole window
+    glViewport(0, 0, win.width, win.height);
+
+    SetCursorPos(x + win.width / 2, y + win.height / 2);
 
 
     Print_Gl_Info();
