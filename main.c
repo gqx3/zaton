@@ -1,12 +1,19 @@
 #include <windows.h>
-#include <stdio.h>
-#include <stdbool.h>
+
 #include <GL/GL.h>
 #include <GL/glcorearb.h>
 #include <GL/wglext.h>
 
+#include <stdio.h>
+#include <stdbool.h>
+#include <string.h>
+#include <stdlib.h>
+#include <errno.h>
+
 #define window_width 1280
 #define window_height 720
+
+
 
 void Print_Gl_Info()
 {
@@ -22,6 +29,8 @@ void Print_Gl_Info()
     fclose(file_log);
 }
 
+PFNGLBINDVERTEXARRAYPROC glBindVertexArray;
+PFNGLGENVERTEXARRAYSPROC glGenVertexArrays;
 PFNGLUSEPROGRAMPROC glUseProgram;
 PFNGLATTACHSHADERPROC glAttachShader;
 PFNGLBINDBUFFERPROC glBindBuffer;
@@ -69,6 +78,9 @@ void load_opengl_extensions()
 	wglCreateContextAttribsARB = (PFNWGLCREATECONTEXTATTRIBSARBPROC)wglGetProcAddress("wglCreateContextAttribsARB");
 	wglSwapIntervalEXT = (PFNWGLSWAPINTERVALEXTPROC)wglGetProcAddress("wglSwapIntervalEXT");
 	glAttachShader = (PFNGLATTACHSHADERPROC)wglGetProcAddress("glAttachShader");
+
+        glGenVertexArrays = (PFNGLGENVERTEXARRAYSPROC)wglGetProcAddress("glGenVertexArrays");
+        glBindVertexArray = (PFNGLBINDVERTEXARRAYPROC)wglGetProcAddress("glBindVertexArray");
 	glBindBuffer = (PFNGLBINDBUFFERPROC)wglGetProcAddress("glBindBuffer");
 	glBindVertexArray = (PFNGLBINDVERTEXARRAYPROC)wglGetProcAddress("glBindVertexArray");
 	glBufferData = (PFNGLBUFFERDATAPROC)wglGetProcAddress("glBufferData");
@@ -104,6 +116,82 @@ void load_opengl_extensions()
 	glUniform3fv = (PFNGLUNIFORM3FVPROC)wglGetProcAddress("glUniform3fv");
 	glUniform4fv = (PFNGLUNIFORM4FVPROC)wglGetProcAddress("glUniform4fv");
 	glUniform4f = (PFNGLUNIFORM4FPROC)wglGetProcAddress("glUniform4f");
+}
+
+/* Shader program */
+char *load_file(const char *path);
+GLuint make_shader(GLenum type, const char *source);
+GLuint load_shader(GLenum type, const char *path);
+GLuint make_program(GLuint shader1, GLuint shader2);
+GLuint load_program(const char *path1, const char *path2);
+
+char *load_file(const char *path) {
+    FILE *file;
+    fopen_s(&file, path, "rb");
+    if (!file) {
+        fprintf(stderr, "fopen %s failed: %d %s\n", path, errno, strerror(errno));
+        exit(1);
+    }
+    fseek(file, 0, SEEK_END);
+    int length = ftell(file);
+    rewind(file);
+    char *data = (char*)calloc(length + 1, sizeof(char));
+    fread(data, 1, length, file);
+    fclose(file);
+    return data;
+}
+
+GLuint make_shader(GLenum type, const char *source) {
+    GLuint shader = glCreateShader(type);
+    glShaderSource(shader, 1, &source, NULL);
+    glCompileShader(shader);
+    GLint status;
+    glGetShaderiv(shader, GL_COMPILE_STATUS, &status);
+    if (status == GL_FALSE) {
+        GLint length;
+        glGetShaderiv(shader, GL_INFO_LOG_LENGTH, &length);
+        GLchar *info = (GLchar*)calloc(length, sizeof(GLchar));
+        glGetShaderInfoLog(shader, length, NULL, info);
+        fprintf(stderr, "glCompileShader failed:\n%s\n", info);
+        free(info);
+    }
+    return shader;
+}
+
+GLuint load_shader(GLenum type, const char *path) {
+    char *data = load_file(path);
+    GLuint result = make_shader(type, data);
+    free(data);
+    return result;
+}
+
+GLuint make_program(GLuint shader1, GLuint shader2) {
+    GLuint program = glCreateProgram();
+    glAttachShader(program, shader1);
+    glAttachShader(program, shader2);
+    glLinkProgram(program);
+    GLint status;
+    glGetProgramiv(program, GL_LINK_STATUS, &status);
+    if (status == GL_FALSE) {
+        GLint length;
+        glGetProgramiv(program, GL_INFO_LOG_LENGTH, &length);
+        GLchar *info = (GLchar*)calloc(length, sizeof(GLchar));
+        glGetProgramInfoLog(program, length, NULL, info);
+        fprintf(stderr, "glLinkProgram failed: %s\n", info);
+        free(info);
+    }
+    glDetachShader(program, shader1);
+    glDetachShader(program, shader2);
+    glDeleteShader(shader1);
+    glDeleteShader(shader2);
+    return program;
+}
+
+GLuint load_program(const char *path1, const char *path2) {
+    GLuint shader1 = load_shader(GL_VERTEX_SHADER, path1);
+    GLuint shader2 = load_shader(GL_FRAGMENT_SHADER, path2);
+    GLuint program = make_program(shader1, shader2);
+    return program;
 }
 
 const char lpszAppName[] = "OpenGL";
@@ -237,6 +325,35 @@ int WINAPI WinMain( HINSTANCE hInstance,
 
     Print_Gl_Info();
 
+    // init some data
+    GLuint program = load_program("data/shaders/basic_vertex.glsl", "data/shaders/basic_fragment.glsl");
+
+    float vertices[] = {-1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 1.0, -1.0, 0.0};
+    unsigned int indices[] = {0, 1, 2};
+
+    GLuint vao, vbo, ebo;
+    glGenVertexArrays(1, &vao);
+    glBindVertexArray(vao);
+
+    glGenBuffers(1, &vbo);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER,  9 * sizeof(float), vertices, GL_STATIC_DRAW);
+    
+    glGenBuffers(1, &ebo);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, 3 * sizeof(unsigned int), indices, GL_STATIC_DRAW);
+
+    float *ptr = 0;
+
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0); // position
+    glEnableVertexAttribArray( 0 );
+
+    glBindVertexArray(0);
+
+
+
+
+
     while (!quit)
     {
         if (PeekMessage(&msg, NULL, 0, 0, PM_REMOVE))
@@ -251,6 +368,11 @@ int WINAPI WinMain( HINSTANCE hInstance,
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glClearColor(0.14f, 0.14f, 0.14f, 0); // #2e2e2e
+        glUseProgram(program);
+        glBindVertexArray(vao);
+        glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, NULL);
+        glBindVertexArray(0);
+
         SwapBuffers(hDC);
     }
     return msg.wParam;
