@@ -9,6 +9,10 @@
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>
+#include <math.h>
+#include <assert.h>   /* for assert */
+
+#include "matrix.h"
 
 #define window_width 1280
 #define window_height 720
@@ -18,6 +22,10 @@ typedef struct
     int width;
     int height;
 }_window;
+
+// SHADER PROGRAM
+GLuint program = 0;
+void Set_Matrices();
 
 _window win;
 
@@ -34,6 +42,10 @@ void Print_Gl_Info()
 
     fclose(file_log);
 }
+
+static float myEyeAngle = 0.095f;    /* Angle in radians eye rotates around knight. */
+static float myProjectionMatrix[16];
+
 
 PFNGLBINDVERTEXARRAYPROC glBindVertexArray;
 PFNGLGENVERTEXARRAYSPROC glGenVertexArrays;
@@ -200,7 +212,7 @@ GLuint load_program(const char *path1, const char *path2) {
     return program;
 }
 
-const char lpszAppName[] = "OpenGL";
+const char lpszAppName[] = "zaton";
 
 HDC hDC;
 HGLRC hRC;
@@ -345,6 +357,7 @@ int Init()
     
     // set up viewport whole window
     glViewport(0, 0, win.width, win.height);
+    glEnable(GL_DEPTH_TEST);
 
     SetCursorPos(x + win.width / 2, y + win.height / 2);
 
@@ -352,10 +365,37 @@ int Init()
     Print_Gl_Info();
 
     // init some data
-    GLuint program = load_program("data/shaders/basic_vertex.glsl", "data/shaders/basic_fragment.glsl");
+    program = load_program("data/shaders/basic_vertex.glsl", "data/shaders/basic_fragment.glsl");
 
     float vertices[] = {-1.0, -1.0, 0.0, 0.0, 1.0, 0.0, 1.0, -1.0, 0.0};
     unsigned int indices[] = {0, 1, 2};
+
+    typedef struct Vec3
+    {
+        float x, y, z;
+    } Vec3;
+
+    static const Vec3 kCubeVertices[] =
+    {
+        {  1.0f,  1.0f, -1.0f }, /* 0 */
+        { -1.0f,  1.0f, -1.0f }, /* 1 */
+        { -1.0f, -1.0f, -1.0f }, /* 2 */
+        {  1.0f, -1.0f, -1.0f }, /* 3 */
+        {  1.0f,  1.0f,  1.0f }, /* 4 */
+        { -1.0f,  1.0f,  1.0f }, /* 5 */
+        { -1.0f, -1.0f,  1.0f }, /* 6 */
+        {  1.0f, -1.0f,  1.0f }, /* 7 */
+    };
+
+    static const unsigned int kCubeIndices[] =
+    {
+        0, 2, 1,   0, 3, 2,  /* front */
+        4, 3, 0,   4, 7, 3,  /* right */
+        4, 1, 5,   4, 0, 1,  /* top */
+        1, 6, 5,   1, 2, 6,  /* left */
+        3, 6, 2,   3, 7, 6,  /* bottom */
+        5, 7, 4,   5, 6, 7,  /* back */
+    };
 
     GLuint vao, vbo, ebo;
     glGenVertexArrays(1, &vao);
@@ -363,22 +403,38 @@ int Init()
 
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER,  9 * sizeof(float), vertices, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER,  sizeof(kCubeVertices) * sizeof(Vec3), kCubeVertices, GL_STATIC_DRAW);
     
     glGenBuffers(1, &ebo);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, 3 * sizeof(unsigned int), indices, GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(kCubeIndices) * sizeof(unsigned int), kCubeIndices, GL_STATIC_DRAW);
 
     float *ptr = 0;
 
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0); // position
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vec3), (void*)0);
+    //glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, 0); // position
     glEnableVertexAttribArray( 0 );
 
     glBindVertexArray(0);
 
 
+    double aspectRatio = (float)window_width / (float)window_height;
+    double fieldOfView = 60.0; /* Degrees */
+    /* World-space positions for light and eye. */
+    const float eyeRadius = 70;
+    //const float eyePosition[3] = { cos(myEyeAngle)*eyeRadius, 0, sin(myEyeAngle)*eyeRadius };
+    const float eyePosition[3] = { 0.0, 0.0, 10.0 };
 
+    float viewMatrix[16], modelViewProjMatrix[16];
+    buildPerspectiveMatrix(fieldOfView, aspectRatio, 10, 20,  /* Znear */ myProjectionMatrix);
 
+    buildLookAtMatrix(eyePosition[0], eyePosition[1], eyePosition[2],
+        0, 0, 0,
+        0, 1, 0,
+        viewMatrix);
+
+    /* modelViewProj = projectionMatrix * viewMatrix (model is identity) */
+    multMatrix(modelViewProjMatrix, myProjectionMatrix, viewMatrix);
 
     while (!quit)
     {
@@ -395,8 +451,9 @@ int Init()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glClearColor(0.14f, 0.14f, 0.14f, 0); // #2e2e2e
         glUseProgram(program);
+        glUniformMatrix4fv(glGetUniformLocation(program, "mvp"), 1, GL_FALSE, &modelViewProjMatrix[0]);
         glBindVertexArray(vao);
-        glDrawElements(GL_TRIANGLES, 3, GL_UNSIGNED_INT, NULL);
+        glDrawElements(GL_TRIANGLES, (sizeof(kCubeIndices)/sizeof(kCubeIndices[0])), GL_UNSIGNED_INT, NULL);
         glBindVertexArray(0);
 
         SwapBuffers(hDC);
