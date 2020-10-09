@@ -17,6 +17,7 @@
 #define window_width 1280
 #define window_height 720
 
+
 typedef struct
 {
     int width;
@@ -42,9 +43,6 @@ void Print_Gl_Info()
 
     fclose(file_log);
 }
-
-static float myEyeAngle = 0.095f;    /* Angle in radians eye rotates around knight. */
-static float myProjectionMatrix[16];
 
 
 PFNGLBINDVERTEXARRAYPROC glBindVertexArray;
@@ -339,8 +337,8 @@ int Init()
 
     AdjustWindowRectEx (&rect, style, FALSE, exStyle);
 
-    hWnd = CreateWindowEx(exStyle, lpszAppName, lpszAppName, style, rect.left, rect.top,
-		rect.right - rect.left, rect.bottom - rect.top, NULL, NULL, NULL, NULL);
+    hWnd = CreateWindowEx(exStyle, lpszAppName, lpszAppName, style, rect.left, rect.top,
+		rect.right - rect.left, rect.bottom - rect.top, NULL, NULL, NULL, NULL);
         
 
     if (hWnd == NULL) {
@@ -359,7 +357,8 @@ int Init()
     glViewport(0, 0, win.width, win.height);
     glEnable(GL_DEPTH_TEST);
 
-    SetCursorPos(x + win.width / 2, y + win.height / 2);
+    SetCursorPos(x + win.width / 2, y + win.height / 2);
+
 
 
     Print_Gl_Info();
@@ -397,17 +396,20 @@ int Init()
         5, 7, 4,   5, 6, 7,  /* back */
     };
 
+    int countOfVertices = sizeof(kCubeVertices) / sizeof(kCubeVertices[0]);
+    int countOfIndices = sizeof(kCubeIndices) / sizeof(kCubeIndices[0]);
+
     GLuint vao, vbo, ebo;
     glGenVertexArrays(1, &vao);
     glBindVertexArray(vao);
 
     glGenBuffers(1, &vbo);
     glBindBuffer(GL_ARRAY_BUFFER, vbo);
-    glBufferData(GL_ARRAY_BUFFER,  sizeof(kCubeVertices) * sizeof(Vec3), kCubeVertices, GL_STATIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, countOfVertices * sizeof(Vec3), kCubeVertices, GL_STATIC_DRAW);
     
     glGenBuffers(1, &ebo);
     glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(kCubeIndices) * sizeof(unsigned int), kCubeIndices, GL_STATIC_DRAW);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, countOfIndices * sizeof(unsigned int), kCubeIndices, GL_STATIC_DRAW);
 
     float *ptr = 0;
 
@@ -419,22 +421,16 @@ int Init()
 
 
     double aspectRatio = (float)window_width / (float)window_height;
-    double fieldOfView = 60.0; /* Degrees */
-    /* World-space positions for light and eye. */
-    const float eyeRadius = 70;
-    //const float eyePosition[3] = { cos(myEyeAngle)*eyeRadius, 0, sin(myEyeAngle)*eyeRadius };
-    const float eyePosition[3] = { 0.0, 0.0, 10.0 };
+    Matrix proj = matrixPerspective(45.0, aspectRatio, 0.1f, 100.0f);
+    Vector eye  = {{0.0, 0.0, 6.0, 0.0}};
+    Vector center = {{0.0, 0.0, 0.0, 0.0}};
+    Vector up = {{0.0, 1.0, 0.0, 0.0}};
+    Matrix view = matrixLookAt(eye, center, up);
+    Matrix m = matrixIdentity();
+    Matrix rotate = matrixIdentity();
 
-    float viewMatrix[16], modelViewProjMatrix[16];
-    buildPerspectiveMatrix(fieldOfView, aspectRatio, 10, 20,  /* Znear */ myProjectionMatrix);
 
-    buildLookAtMatrix(eyePosition[0], eyePosition[1], eyePosition[2],
-        0, 0, 0,
-        0, 1, 0,
-        viewMatrix);
-
-    /* modelViewProj = projectionMatrix * viewMatrix (model is identity) */
-    multMatrix(modelViewProjMatrix, myProjectionMatrix, viewMatrix);
+    float angle = 0.0;
 
     while (!quit)
     {
@@ -451,12 +447,19 @@ int Init()
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glClearColor(0.14f, 0.14f, 0.14f, 0); // #2e2e2e
         glUseProgram(program);
-        glUniformMatrix4fv(glGetUniformLocation(program, "mvp"), 1, GL_FALSE, &modelViewProjMatrix[0]);
+        rotate = matrixRotate(&m, angle, 0.0, 1.0, 0.0);
+        rotate = matrixRotate(&rotate, angle, 0.0, 0.0, 1.0);
+        glUniformMatrix4fv(glGetUniformLocation(program, "view"), 1, GL_FALSE, (GLfloat*)&view.m[0]);
+        glUniformMatrix4fv(glGetUniformLocation(program, "proj"), 1, GL_FALSE, (GLfloat*)&proj.m[0]);
+        glUniformMatrix4fv(glGetUniformLocation(program, "model"), 1, GL_FALSE, (GLfloat*)&rotate.m[0]);
         glBindVertexArray(vao);
         glDrawElements(GL_TRIANGLES, (sizeof(kCubeIndices)/sizeof(kCubeIndices[0])), GL_UNSIGNED_INT, NULL);
         glBindVertexArray(0);
 
+
         SwapBuffers(hDC);
+
+        angle+=0.1;
     }
     return msg.wParam;
 }
