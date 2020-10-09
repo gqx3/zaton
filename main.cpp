@@ -13,9 +13,62 @@
 #include <assert.h>   /* for assert */
 
 #include "matrix.h"
+#include "math.h"
 
 #define window_width 1280
 #define window_height 720
+
+void Query_Performance_Counter(__int64& in) {
+
+	QueryPerformanceCounter((LARGE_INTEGER*)&in);
+}
+/*
+==================
+==================
+*/
+void Query_Performance_Frequency(__int64& in) {
+
+	QueryPerformanceFrequency((LARGE_INTEGER*)&in);
+}
+
+struct timer_ 
+{
+    __int32 frame_count;
+    __int64 counter;
+    __int64 prev_counter;
+    __int64 frequency;
+    float real_delta_time;
+    float delta_time;
+    double fixed_step;
+    double accumulator;
+} timer;
+
+
+void Initialise_Input(timer_&)
+{
+    {
+        // init timer
+        timer.frame_count = 0;
+        timer.delta_time = 0.0f;
+        timer.fixed_step = 1.0 / 60.0;
+        timer.accumulator = 0.0;
+        Query_Performance_Frequency(timer.frequency);
+        Query_Performance_Counter(timer.prev_counter);
+    }
+}
+__int32 Update_Timer(timer_&)
+{
+    Query_Performance_Counter(timer.counter);
+    double delta = (timer.counter - timer.prev_counter) / (double)timer.frequency;
+
+    timer.real_delta_time = (float)delta;
+    timer.prev_counter = timer.counter;
+    timer.accumulator += delta;
+    timer.delta_time = (float)timer.fixed_step;
+    __int32 n_steps = (__int32)(timer.accumulator / timer.fixed_step);
+    n_steps = min(n_steps, 5);
+    return n_steps;
+}
 
 
 typedef struct
@@ -45,8 +98,6 @@ void Print_Gl_Info()
 }
 
 
-PFNGLBINDVERTEXARRAYPROC glBindVertexArray;
-PFNGLGENVERTEXARRAYSPROC glGenVertexArrays;
 PFNGLUSEPROGRAMPROC glUseProgram;
 PFNGLATTACHSHADERPROC glAttachShader;
 PFNGLBINDBUFFERPROC glBindBuffer;
@@ -95,8 +146,6 @@ void load_opengl_extensions()
 	wglSwapIntervalEXT = (PFNWGLSWAPINTERVALEXTPROC)wglGetProcAddress("wglSwapIntervalEXT");
 	glAttachShader = (PFNGLATTACHSHADERPROC)wglGetProcAddress("glAttachShader");
 
-        glGenVertexArrays = (PFNGLGENVERTEXARRAYSPROC)wglGetProcAddress("glGenVertexArrays");
-        glBindVertexArray = (PFNGLBINDVERTEXARRAYPROC)wglGetProcAddress("glBindVertexArray");
 	glBindBuffer = (PFNGLBINDBUFFERPROC)wglGetProcAddress("glBindBuffer");
 	glBindVertexArray = (PFNGLBINDVERTEXARRAYPROC)wglGetProcAddress("glBindVertexArray");
 	glBufferData = (PFNGLBUFFERDATAPROC)wglGetProcAddress("glBufferData");
@@ -268,7 +317,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
             if (nPixFormat != -1)
             {
                 SetPixelFormat(hDC, nPixFormat, &pfd);
-                GLuint attribs[] = {
+                const int attribs[] = {
                     WGL_CONTEXT_MAJOR_VERSION_ARB, 3,
                     WGL_CONTEXT_MINOR_VERSION_ARB, 3,
                     WGL_CONTEXT_PROFILE_MASK_ARB,  WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
@@ -421,16 +470,26 @@ int Init()
 
 
     double aspectRatio = (float)window_width / (float)window_height;
-    Matrix proj = matrixPerspective(45.0, aspectRatio, 0.1f, 100.0f);
+    //Matrix proj = matrixPerspective(45.0, aspectRatio, 0.1f, 100.0f);
+    mat4 proj = perspective(45.0, aspectRatio, 0.1f, 100.0f);
     Vector eye  = {{0.0, 0.0, 6.0, 0.0}};
     Vector center = {{0.0, 0.0, 0.0, 0.0}};
     Vector up = {{0.0, 1.0, 0.0, 0.0}};
-    Matrix view = matrixLookAt(eye, center, up);
+    //Matrix view = matrixLookAt(eye, center, up);
+    Matrix view = matrixIdentity();
+    matrixTranslateInplace(&view, 0.0, 0.0, -6.0);
     Matrix m = matrixIdentity();
     Matrix rotate = matrixIdentity();
 
 
+    Initialise_Input(timer);
+
+
     float angle = 0.0;
+// ---- game loop
+    float fps_timer = 0.0f;
+    __int32 n_frames = 0;
+    __int32 frame_rate = 0;
 
     while (!quit)
     {
@@ -443,14 +502,38 @@ int Init()
         if (msg.message == WM_QUIT)
             quit = true;
 
+// ------------ timer do update
+    
+        __int32 n_steps = Update_Timer(timer);
+        fps_timer += timer.real_delta_time;
+
+        bool is_one_second = fps_timer >= 1.0f;
+        fps_timer -= is_one_second ? 1.0f : 0.0f;
+
+	frame_rate = is_one_second ? n_frames : frame_rate;
+        n_frames = is_one_second ? 0 : n_frames;
+
+        for (__int32 i_step = 0; i_step < n_steps; i_step++) {
+
+// -------------- update rotation
+                angle+= 90.0 * timer.fixed_step;
+                rotate = matrixRotate(&m, angle, 0.0, 1.0, 0.0);
+                rotate = matrixRotate(&rotate, angle, 0.0, 0.0, 1.0);
+
+                timer.accumulator -= timer.fixed_step;
+                timer.frame_count++;
+                n_frames++;
+
+        }
+        printf("frame_rate: %d\n", frame_rate);
+
 
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         glClearColor(0.14f, 0.14f, 0.14f, 0); // #2e2e2e
         glUseProgram(program);
-        rotate = matrixRotate(&m, angle, 0.0, 1.0, 0.0);
-        rotate = matrixRotate(&rotate, angle, 0.0, 0.0, 1.0);
+
         glUniformMatrix4fv(glGetUniformLocation(program, "view"), 1, GL_FALSE, (GLfloat*)&view.m[0]);
-        glUniformMatrix4fv(glGetUniformLocation(program, "proj"), 1, GL_FALSE, (GLfloat*)&proj.m[0]);
+        glUniformMatrix4fv(glGetUniformLocation(program, "proj"), 1, GL_FALSE, (GLfloat*)&proj);
         glUniformMatrix4fv(glGetUniformLocation(program, "model"), 1, GL_FALSE, (GLfloat*)&rotate.m[0]);
         glBindVertexArray(vao);
         glDrawElements(GL_TRIANGLES, (sizeof(kCubeIndices)/sizeof(kCubeIndices[0])), GL_UNSIGNED_INT, NULL);
@@ -459,7 +542,7 @@ int Init()
 
         SwapBuffers(hDC);
 
-        angle+=0.1;
+
     }
     return msg.wParam;
 }
