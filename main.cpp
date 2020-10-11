@@ -13,7 +13,6 @@
 #include <assert.h>   /* for assert */
 
 #include "matrix.h"
-#include "math.h"
 
 #define window_width 1280
 #define window_height 720
@@ -471,11 +470,11 @@ int Init()
 
     double aspectRatio = (float)window_width / (float)window_height;
     //Matrix proj = matrixPerspective(45.0, aspectRatio, 0.1f, 100.0f);
-    mat4 proj = perspective(45.0, aspectRatio, 0.1f, 100.0f);
-    Vector eye  = {{0.0, 0.0, 6.0, 0.0}};
-    Vector center = {{0.0, 0.0, 0.0, 0.0}};
-    Vector up = {{0.0, 1.0, 0.0, 0.0}};
-    //Matrix view = matrixLookAt(eye, center, up);
+    Matrix proj = matrixPerspective(45.0, aspectRatio, 0.1f, 100.0f);
+    // Vector eye  = {{0.0, 0.0, 6.0, 0.0}};
+    // Vector center = {{0.0, 0.0, 0.0, 0.0}};
+    // Vector up = {{0.0, 1.0, 0.0, 0.0}};
+    // //Matrix view = matrixLookAt(eye, center, up);
     Matrix view = matrixIdentity();
     matrixTranslateInplace(&view, 0.0, 0.0, -6.0);
     Matrix m = matrixIdentity();
@@ -510,7 +509,7 @@ int Init()
         bool is_one_second = fps_timer >= 1.0f;
         fps_timer -= is_one_second ? 1.0f : 0.0f;
 
-	frame_rate = is_one_second ? n_frames : frame_rate;
+        frame_rate = is_one_second ? n_frames : frame_rate;
         n_frames = is_one_second ? 0 : n_frames;
 
         for (__int32 i_step = 0; i_step < n_steps; i_step++) {
@@ -519,6 +518,8 @@ int Init()
                 angle+= 90.0 * timer.fixed_step;
                 rotate = matrixRotate(&m, angle, 0.0, 1.0, 0.0);
                 rotate = matrixRotate(&rotate, angle, 0.0, 0.0, 1.0);
+                //rotateY(angle);
+                //rotateZ(angle);
 
                 timer.accumulator -= timer.fixed_step;
                 timer.frame_count++;
@@ -533,7 +534,7 @@ int Init()
         glUseProgram(program);
 
         glUniformMatrix4fv(glGetUniformLocation(program, "view"), 1, GL_FALSE, (GLfloat*)&view.m[0]);
-        glUniformMatrix4fv(glGetUniformLocation(program, "proj"), 1, GL_FALSE, (GLfloat*)&proj);
+        glUniformMatrix4fv(glGetUniformLocation(program, "proj"), 1, GL_FALSE, (GLfloat*)&proj.m[0]);
         glUniformMatrix4fv(glGetUniformLocation(program, "model"), 1, GL_FALSE, (GLfloat*)&rotate.m[0]);
         glBindVertexArray(vao);
         glDrawElements(GL_TRIANGLES, (sizeof(kCubeIndices)/sizeof(kCubeIndices[0])), GL_UNSIGNED_INT, NULL);

@@ -1,23 +1,10 @@
 #include "matrix.h"
-
-#include <math.h>     /* for sqrt, sin, cos, and fabs */
-#include <assert.h>   /* for assert */
 #include <string.h>
-
-#ifndef M_PI
-#define M_PI 3.14159265358979323846
-#endif
-
-#define UNUSED(x) (void)(x)
-
-#define U(x) (x)
-
-#define V(x) (1.0f - (x))
+#include <math.h>
 
 #define REAL_NUM_EQ(x, y) (fabs((x) - (y)) < 0.000001)
 
-Vector
-vectorNull()
+Vector vectorNull()
 {
     Vector res = {{ 0 }};
     return res;

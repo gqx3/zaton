@@ -1,5 +1,17 @@
-#ifndef MATRIX_H
-#define MATRIX_H
+#ifndef AFISKON_LINEARALG_H
+#define AFISKON_LINEARALG_H
+
+#ifndef M_PI
+#define M_PI 3.14159265358979323846
+#endif
+#define DEG2RAD (M_PI / 180.0f)
+
+
+#define UNUSED(x) (void)(x)
+
+#define U(x) (x)
+
+#define V(x) (1.0f - (x))
 
 typedef struct Matrix
 {
@@ -34,4 +46,4 @@ Matrix matrixRotate(const Matrix* m, float angle,
 void matrixScaleInplace(Matrix* m, float x, float y, float z);
 void matrixTranslateInplace(Matrix* m, float x, float y, float z);
 
-#endif
+#endif // AFISKON_LINEARALG_H
